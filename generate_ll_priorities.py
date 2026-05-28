@@ -140,8 +140,39 @@ TEAM_SYMBOLS = {"Coaches": "🌱", "Coordinators": "⚙️", "Both": "👥"}
 
 
 def read_gantt(path):
-    df = pd.read_excel(path, sheet_name="Activities", dtype=str)
-    return df.dropna(how="all")
+    """Read the Activities tab, automatically detecting the header row.
+
+    The Gantt file has a title and instructions above the actual column headers,
+    so we scan the first 10 rows for the one containing 'Workstream' and use that
+    as the header row.
+    """
+    # First read raw with no header to find the right row
+    df_raw = pd.read_excel(path, sheet_name="Activities", dtype=str, header=None)
+
+    header_row = None
+    for i in range(min(10, len(df_raw))):
+        row_values = [str(v).strip() if pd.notna(v) else "" for v in df_raw.iloc[i].tolist()]
+        if "Workstream" in row_values:
+            header_row = i
+            break
+
+    if header_row is None:
+        raise ValueError(
+            "Could not find header row in Activities tab. "
+            "Expected to find a row containing 'Workstream' within the first 10 rows. "
+            f"First 3 rows seen: {df_raw.head(3).to_string()}"
+        )
+
+    print(f"   • Header row detected at row {header_row + 1} (1-indexed)")
+
+    # Re-read with the correct header row
+    df = pd.read_excel(path, sheet_name="Activities", dtype=str, header=header_row)
+    df = df.dropna(how="all")
+
+    print(f"   • Loaded {len(df)} data rows")
+    print(f"   • Columns: {list(df.columns)}")
+
+    return df
 
 
 def parse_months(row):
@@ -180,10 +211,23 @@ def build_data(df):
     data = {ws: {m: [] for m in range(1, 13)} for ws in WORKSTREAM_ORDER}
     effort = {"Coaches": {}, "Coordinators": {}, "Overall": {}}
 
+    processed = 0
+    skipped_no_ws = 0
+    skipped_no_activity = 0
+    unknown_workstreams = set()
+
     for _, row in df.iterrows():
         ws = str(row.get("Workstream", "")).strip()
         activity = str(row.get("Activity", "")).strip()
-        if not activity or activity == "nan" or ws not in data:
+
+        if not activity or activity == "nan":
+            skipped_no_activity += 1
+            continue
+        if not ws or ws == "nan":
+            skipped_no_ws += 1
+            continue
+        if ws not in data:
+            unknown_workstreams.add(ws)
             continue
 
         eff_raw = str(row.get("Effort (1–4)", "")).strip()
@@ -192,7 +236,11 @@ def build_data(df):
         link = str(row.get("Link", "")).strip()
         notes = str(row.get("Notes", "")).strip()
 
-        for m in parse_months(row):
+        months_for_row = parse_months(row)
+        if not months_for_row:
+            continue
+
+        for m in months_for_row:
             if 1 <= m <= 12:
                 data[ws][m].append({
                     "activity": activity,
@@ -214,6 +262,25 @@ def build_data(df):
                         effort["Overall"][m] = effort["Overall"].get(m, 0) + e
                     except Exception:
                         pass
+        processed += 1
+
+    total_activity_instances = sum(len(data[ws][m]) for ws in data for m in data[ws])
+    print(f"   • Processed {processed} activity rows into {total_activity_instances} month-instances")
+    if skipped_no_activity:
+        print(f"   • Skipped {skipped_no_activity} rows with no activity name")
+    if skipped_no_ws:
+        print(f"   • Skipped {skipped_no_ws} rows with no workstream")
+    if unknown_workstreams:
+        print(f"   ⚠️  Found {len(unknown_workstreams)} unknown workstream(s) — these were skipped:")
+        for ws in sorted(unknown_workstreams):
+            print(f"      - '{ws}'")
+        print(f"   ℹ️  Known workstreams: {WORKSTREAM_ORDER}")
+
+    if processed == 0:
+        raise ValueError(
+            "No activities were processed! Check that the Activities tab has data rows "
+            "and that the 'Workstream' column values match the expected names exactly."
+        )
 
     return data, effort
 
@@ -406,6 +473,59 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
       font-size: 10.5px;
       table-layout: fixed;
     }}
+    /* When split into halves, give months more room */
+    table.grid-half {{
+      font-size: 11.5px;
+    }}
+    table.grid-half thead th.month {{ width: 13.75%; }}
+    table.grid-half thead th.workstream-col {{ width: 17.5%; }}
+    table.grid-half td {{ padding: 8px 7px; }}
+
+    /* Half-section wrapping each semester table */
+    .half-section {{
+      padding-top: 8px;
+    }}
+    .half-title {{
+      font-family: 'Poppins', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--navy);
+      margin: 0 40px 12px;
+      padding: 10px 16px;
+      background: linear-gradient(90deg, var(--navy) 0%, var(--navy) 4px, transparent 4px);
+      padding-left: 18px;
+      border-bottom: 2px solid var(--navy);
+    }}
+
+    /* Compact second-page header (visible only when printing) */
+    .page-two-header {{ display: none; }}
+    .header-band-compact {{
+      padding: 18px 40px 16px;
+    }}
+    .header-band-compact .header-seal {{
+      width: 70px;
+      height: 70px;
+    }}
+    .header-band-compact h1 {{
+      font-size: 22px !important;
+    }}
+    .header-band-compact .lausd-wordmark {{
+      width: 130px;
+    }}
+    .page-tag {{
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 14px;
+      opacity: 0.7;
+      letter-spacing: 0.02em;
+    }}
+
+    /* Forced print page break between halves */
+    .page-break {{
+      display: block;
+      height: 1px;
+    }}
+
     table.grid thead th {{
       background: var(--navy);
       color: var(--white);
@@ -579,11 +699,28 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
       .footer a.print-btn {{ display: none; }}
       @page {{ size: landscape; margin: 0.4in; }}
       table.grid {{ page-break-inside: avoid; }}
-      .summary-section {{ page-break-before: auto; }}
       .activity-card a.link {{
         font-size: 8.5px;
         color: var(--navy) !important;
       }}
+      /* Force a fresh page before the second-half table */
+      .page-break {{
+        page-break-after: always;
+        break-after: page;
+      }}
+      /* Show the compact header when printing the second page */
+      .page-two-header {{ display: block; }}
+      /* On the second printed page, the intro/legend was on page 1 — start fresh */
+      .summary-section {{
+        page-break-before: always;
+        break-before: page;
+      }}
+    }}
+
+    /* On screen, hide the print-only second header to avoid visual duplication */
+    @media screen {{
+      .page-two-header {{ display: none; }}
+      .page-break {{ display: none; }}
     }}
     """
 
@@ -633,7 +770,7 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
   <!-- INTRO -->
   <div class="intro">
     <h2>Annual Workstream Overview</h2>
-    <p>This dashboard shows what the Linked Learning team is focused on each month of the school year. Use it to plan initiatives, anticipate capacity, and align departmental priorities. The summary at the bottom shows total team effort load by month.</p>
+    <p>This dashboard shows what the Linked Learning team is focused on each month of the school year, split into two semesters for easier reading and printing. Use it to plan initiatives, anticipate capacity, and align departmental priorities. The team capacity summary at the end shows total effort load by month.</p>
   </div>
 
   <!-- LEGEND -->
@@ -660,13 +797,15 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
     </div>
   </div>
 
-  <!-- MAIN GRID TABLE -->
-  <div class="table-wrap">
-    <table class="grid">
-      <thead>
-        <tr>
-          <th class="workstream-col">Workstream</th>""")
-    for m in range(1, 13):
+  <!-- MAIN GRID TABLE — FIRST HALF: JULY THROUGH DECEMBER -->
+  <div class="half-section">
+    <h3 class="half-title">First Semester · July – December 2026</h3>
+    <div class="table-wrap">
+      <table class="grid grid-half">
+        <thead>
+          <tr>
+            <th class="workstream-col">Workstream</th>""")
+    for m in range(1, 7):  # months 1-6 (Jul-Dec)
         parts.append(f'<th class="month">{MONTHS[m]}</th>')
     parts.append('</tr></thead><tbody>')
 
@@ -676,7 +815,7 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
         parts.append(f'<tr>')
         parts.append(f'<td class="workstream-label" style="background:{bg};border-left:5px solid {accent};">{ws}</td>')
 
-        for m in range(1, 13):
+        for m in range(1, 7):
             items = data[ws][m]
             parts.append('<td>')
             for it in items:
@@ -695,8 +834,65 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
                 parts.append('</div>')
             parts.append('</td>')
         parts.append('</tr>')
+    parts.append('</tbody></table></div></div>')
 
-    parts.append('</tbody></table></div>')
+    # --- PAGE BREAK + SECOND HALF HEADER ---
+    parts.append(f"""
+  <!-- PAGE 2 BREAK -->
+  <div class="page-break"></div>
+
+  <!-- COMPACT PAGE 2 HEADER (visible only on print + as a divider on screen) -->
+  <div class="page-two-header">
+    <div class="header-band header-band-compact">
+      {seal_html}
+      <div class="header-center">
+        <h1>Linked Learning Team Priorities <span class="page-tag">· Page 2</span></h1>
+        <div class="sub">Second Semester · January – June 2027</div>
+      </div>
+      <div class="header-right">
+        {wordmark_html}
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID TABLE — SECOND HALF: JANUARY THROUGH JUNE -->
+  <div class="half-section">
+    <h3 class="half-title">Second Semester · January – June 2027</h3>
+    <div class="table-wrap">
+      <table class="grid grid-half">
+        <thead>
+          <tr>
+            <th class="workstream-col">Workstream</th>""")
+    for m in range(7, 13):  # months 7-12 (Jan-Jun)
+        parts.append(f'<th class="month">{MONTHS[m]}</th>')
+    parts.append('</tr></thead><tbody>')
+
+    for ws in WORKSTREAM_ORDER:
+        bg = WORKSTREAM_COLORS[ws]
+        accent = WORKSTREAM_ACCENTS[ws]
+        parts.append(f'<tr>')
+        parts.append(f'<td class="workstream-label" style="background:{bg};border-left:5px solid {accent};">{ws}</td>')
+
+        for m in range(7, 13):
+            items = data[ws][m]
+            parts.append('<td>')
+            for it in items:
+                klass = "activity-card milestone" if it["milestone"] else "activity-card"
+                style = "" if it["milestone"] else f"background:{bg};border-left-color:{accent};"
+                parts.append(f'<div class="{klass}" style="{style}">')
+                parts.append(f'<span class="title">{it["activity"]}</span>')
+                parts.append('<div class="meta">')
+                if it["who_symbol"]:
+                    parts.append(f'<span class="symbol" title="{it["who"]}">{it["who_symbol"]}</span>')
+                if it["effort"]:
+                    parts.append(f'<span class="dots">{it["effort"]}</span>')
+                parts.append('</div>')
+                if it["link"]:
+                    parts.append(f'<a href="{it["link"]}" target="_blank" class="link">↗ Open link</a>')
+                parts.append('</div>')
+            parts.append('</td>')
+        parts.append('</tr>')
+    parts.append('</tbody></table></div></div>')
 
     # --- SUMMARY ---
     parts.append(f"""
