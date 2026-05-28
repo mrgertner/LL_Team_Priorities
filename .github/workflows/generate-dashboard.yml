@@ -8,7 +8,7 @@ on:
   schedule:
     - cron: '0 16 * * 1'
   
-  # Auto-trigger when Gantt file changes (optional but very useful)
+  # Auto-trigger when Gantt file or script changes
   push:
     paths:
       - 'LL_Team_Gantt_Heatmap_050126.xlsm'
@@ -23,12 +23,12 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.12'
       
       - name: Install dependencies
         run: pip install pandas openpyxl
@@ -50,7 +50,7 @@ jobs:
           git push
       
       - name: Upload dashboard as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: LL_Team_Priorities_Dashboard
           path: LL_Team_Priorities_Dashboard.html
