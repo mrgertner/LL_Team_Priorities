@@ -935,7 +935,7 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
 
 
 if __name__ == "__main__":
-    gantt = sys.argv[1] if len(sys.argv) > 1 else "LL_Team_Gantt_Heatmap_050126.xlsm"
+    gantt = sys.argv[1] if len(sys.argv) > 1 else "LL_Team_Gantt_Heatmap_050126.xlsx"
     out = sys.argv[2] if len(sys.argv) > 2 else "LL_Team_Priorities_Dashboard.html"
     wordmark_path = sys.argv[3] if len(sys.argv) > 3 else "LAUSD_wordmark_RGB.svg"
     seal_path = sys.argv[4] if len(sys.argv) > 4 else "LAUSD_seal.svg"
