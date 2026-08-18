@@ -6,7 +6,7 @@ on:
     - cron: '0 16 * * 1'
   push:
     paths:
-      - 'LL_Team_Gantt_Heatmap_Revised_Categories.xlsx'
+      - 'LL_Team_Gantt_Heatmap.xlsx'
       - 'generate_ll_priorities.py'
 
 # Prevent multiple runs from clashing — queue them instead of running in parallel
@@ -39,7 +39,7 @@ jobs:
       - name: Generate dashboard
         run: |
           python generate_ll_priorities.py \
-            "LL_Team_Gantt_Heatmap_Revised_Categories.xlsx" \
+            "LL_Team_Gantt_Heatmap.xlsx" \
             "LL_Team_Priorities_Dashboard.html" \
             "LAUSD_wordmark_RGB.svg" \
             "LAUSD_seal.svg"
