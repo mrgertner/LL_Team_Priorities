@@ -300,8 +300,13 @@ def heat_color(val, maxv):
         return LAUSD["blue_005"]
 
 
-def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
+def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None, variant=None):
     today = datetime.now().strftime("%B %d, %Y")
+    # Optional label that tells two dashboards apart (e.g. Planned vs. Actuals).
+    # Left empty, the page is exactly as before.
+    variant_title = f" · {variant}" if variant else ""
+    variant_h1 = f' <span class="page-tag">· {variant}</span>' if variant else ""
+    variant_source = Path(source_file).name if variant else "LL Team Gantt"
     max_effort = max([max(v.values()) if v else 0 for v in effort.values()] + [1])
 
     css = f"""
@@ -743,7 +748,7 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Linked Learning Team Priorities | LAUSD</title>
+<title>Linked Learning Team Priorities{variant_title} | LAUSD</title>
 <style>{css}</style>
 </head>
 <body>
@@ -753,7 +758,7 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
   <div class="header-band">
     {seal_html}
     <div class="header-center">
-      <h1>Linked Learning Team Priorities</h1>
+      <h1>Linked Learning Team Priorities{variant_h1}</h1>
       <div class="sub">2026–2027 School Year · Team Capacity &amp; Workstream Calendar</div>
     </div>
     <div class="header-right">
@@ -846,7 +851,7 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
     <div class="header-band header-band-compact">
       {seal_html}
       <div class="header-center">
-        <h1>Linked Learning Team Priorities <span class="page-tag">· Page 2</span></h1>
+        <h1>Linked Learning Team Priorities{variant_h1} <span class="page-tag">· Page 2</span></h1>
         <div class="sub">Second Semester · January – June 2027</div>
       </div>
       <div class="header-right">
@@ -922,7 +927,7 @@ def generate_html(data, effort, source_file, wordmark_svg=None, seal_svg=None):
   <div class="footer">
     <div>
       <div class="tagline">Ready for the World</div>
-      <div style="opacity:0.75;margin-top:4px;font-size:10px;">Generated {today} · Source: LL Team Gantt (Activities tab)</div>
+      <div style="opacity:0.75;margin-top:4px;font-size:10px;">Generated {today} · Source: {variant_source} (Activities tab)</div>
     </div>
     <a class="print-btn" href="javascript:window.print()">Print / Save as PDF</a>
   </div>
@@ -939,6 +944,7 @@ if __name__ == "__main__":
     out = sys.argv[2] if len(sys.argv) > 2 else "LL_Team_Priorities_Dashboard.html"
     wordmark_path = sys.argv[3] if len(sys.argv) > 3 else "LAUSD_wordmark_RGB.svg"
     seal_path = sys.argv[4] if len(sys.argv) > 4 else "LAUSD_seal.svg"
+    variant = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5].strip() else None
 
     print(f"📂 Reading {gantt}…")
     df = read_gantt(gantt)
@@ -958,7 +964,7 @@ if __name__ == "__main__":
         print(f"ℹ️  Seal file not found at {seal_path} — proceeding without seal")
 
     print("🎨 Generating brand-aligned HTML…")
-    html = generate_html(data, effort, gantt, wordmark_svg=wordmark, seal_svg=seal)
+    html = generate_html(data, effort, gantt, wordmark_svg=wordmark, seal_svg=seal, variant=variant)
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"✅ Dashboard ready: {out}")
