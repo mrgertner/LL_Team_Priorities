@@ -7,6 +7,7 @@ on:
   push:
     paths:
       - 'LL_Team_Gantt_Heatmap.xlsx'
+      - 'LL_Team_Gantt_Heatmap_Actuals.xlsx'
       - 'generate_ll_priorities.py'
 
 # Prevent multiple runs from clashing — queue them instead of running in parallel
@@ -36,19 +37,28 @@ jobs:
       - name: Install dependencies
         run: pip install pandas openpyxl
       
-      - name: Generate dashboard
+      - name: Generate dashboard (planned)
         run: |
           python generate_ll_priorities.py \
             "LL_Team_Gantt_Heatmap.xlsx" \
             "LL_Team_Priorities_Dashboard.html" \
             "LAUSD_wordmark_RGB.svg" \
             "LAUSD_seal.svg"
+
+      - name: Generate dashboard (actuals)
+        run: |
+          python generate_ll_priorities.py \
+            "LL_Team_Gantt_Heatmap_Actuals.xlsx" \
+            "LL_Team_Priorities_Dashboard_Actuals.html" \
+            "LAUSD_wordmark_RGB.svg" \
+            "LAUSD_seal.svg" \
+            "Actuals (Jul–Oct from support log)"
       
       - name: Commit dashboard back to repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add LL_Team_Priorities_Dashboard.html
+          git add LL_Team_Priorities_Dashboard.html LL_Team_Priorities_Dashboard_Actuals.html
 
           # Skip if nothing actually changed
           if git diff --staged --quiet; then
@@ -56,7 +66,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Auto-update dashboard $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "Auto-update dashboards $(date +'%Y-%m-%d %H:%M')"
 
           # Push with retry — handles race conditions if main has moved
           for attempt in 1 2 3 4 5; do
@@ -76,6 +86,8 @@ jobs:
       - name: Upload dashboard as artifact
         uses: actions/upload-artifact@v7
         with:
-          name: LL_Team_Priorities_Dashboard
-          path: LL_Team_Priorities_Dashboard.html
+          name: LL_Team_Priorities_Dashboards
+          path: |
+            LL_Team_Priorities_Dashboard.html
+            LL_Team_Priorities_Dashboard_Actuals.html
           retention-days: 90
